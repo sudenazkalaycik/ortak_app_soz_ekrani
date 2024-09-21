@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() {
+void main() async {
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 
@@ -12,19 +14,24 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: QuoteScreen(),
+      title: 'Quote App',
+      home: const QuoteScreen(),
     );
   }
 }
 
 class QuoteScreen extends StatefulWidget {
+  const QuoteScreen({super.key});
+
   @override
-  _QuoteScreenState createState() => _QuoteScreenState();
+  State<QuoteScreen> createState() => _QuoteScreenState();
 }
 
 class _QuoteScreenState extends State<QuoteScreen> {
-  String quote = 'Yükleniyor...';
+  String quote = '';
   String author = '';
+  bool isLoading = true;
+  bool isError = false;
 
   @override
   void initState() {
@@ -33,24 +40,48 @@ class _QuoteScreenState extends State<QuoteScreen> {
   }
 
   Future<void> fetchQuote() async {
-    final response = await http.get(
-      Uri.parse('https://thought-of-the-day.p.rapidapi.com/thought'),
-      headers: {
-        'x-rapidapi-host': 'thought-of-the-day.p.rapidapi.com',
-        'x-rapidapi-key': '69a5594eaemsh4dcaabc89ab9f04p19ccb0jsnc83ea67c6825',
-      },
-    );
+    setState(() {
+      isLoading = true;
+      isError = false;
+    });
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
+    final String apiKey = dotenv.env['RAPIDAPI_KEY'] ?? '';
+    final url = Uri.parse('https://get-quotes-api.p.rapidapi.com/random');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'x-rapidapi-host': 'get-quotes-api.p.rapidapi.com',
+          'x-rapidapi-key': apiKey,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data.containsKey('quote') && data['quote'] != null) {
+          setState(() {
+            quote = data['quote']['quote'] ?? 'Alıntı bulunamadı.';
+            author = data['quote']['author'] ?? 'Bilinmeyen yazar';
+            isLoading = false;
+          });
+        } else {
+          setState(() {
+            isError = true;
+            isLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          isError = true;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
       setState(() {
-        quote = data['quotes'][0]['quote'];
-        author = data['quotes'][0]['author'];
-      });
-    } else {
-      setState(() {
-        quote = 'Bir hata oluştu.';
-        author = '';
+        isError = true;
+        isLoading = false;
       });
     }
   }
@@ -69,33 +100,59 @@ class _QuoteScreenState extends State<QuoteScreen> {
             ),
           ),
           child: Center(
-            child: Column(
+            child: isLoading
+                ? const CircularProgressIndicator(
+                color: Colors.blue
+            )
+                : isError
+                ? Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  quote,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    color: Colors.yellow,
-                    shadows: [
-                      Shadow(
-                        offset: Offset(2.0, 2.0),
-                        blurRadius: 3.0,
-                        color: Colors.grey,
-                      ),
-                    ],
+                const Text(
+                  'Bir hata oluştu. Lütfen tekrar deneyin.',
+                  style: TextStyle(
+                    fontSize: 20,
+                    color: Colors.red,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  '- $author',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    color: Colors.white,
-                  ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: fetchQuote,
+                  child: const Text('Tekrar Dene'),
                 ),
               ],
+            )
+                : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    quote,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      color: Colors.yellow,
+                      shadows: [
+                        Shadow(
+                          offset: Offset(2.0, 2.0),
+                          blurRadius: 3.0,
+                          color: Colors.grey,
+                        ),
+                      ],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '- $author',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
